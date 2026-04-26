@@ -1,0 +1,22 @@
+[package]
+name = "noises"
+version = "0.1.0"
+edition = "2024"
+description = "Continuous white, pink, and brown noise generators for native and web audio pipelines"
+license = "MIT"
+rust-version = "1.85"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+cpal-demo = ["dep:cpal"]
+
+[dependencies]
+cpal = { version = "0.16", optional = true }
+
+[[bin]]
+name = "noise-player"
+path = "src/bin/noise-player.rs"
+required-features = ["cpal-demo"]

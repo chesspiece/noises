@@ -14,6 +14,7 @@ Usage:
 
 Options:
   --kind <white|pink|brown>   Noise color (default: pink)
+  --playback <f32|q015>       Generator playback path (default: f32)
   --amplitude <0.0..1.0>      Output gain (default: 0.2)
   --sample-rate <hz>          Override the device sample rate
   --channels <n>              Override the device channel count
@@ -48,6 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let device_name = device.name()?;
     let default_config = device.default_output_config()?;
+    println!( "Sample format: {}", default_config.sample_format().to_string());
     let sample_format = default_config.sample_format();
 
     let mut config: StreamConfig = default_config.into();
@@ -67,11 +69,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     })?;
 
     eprintln!(
-        "playing {:?} noise on \"{}\" at {} Hz / {} channels",
-        options.kind, device_name, config.sample_rate.0, config.channels
+        "playing {:?} noise ({}) on \"{}\" at {} Hz / {} channels",
+        options.kind,
+        options.playback_format.label(),
+        device_name,
+        config.sample_rate.0,
+        config.channels
     );
 
-    let stream = build_stream(&device, &config, sample_format, generator)?;
+    let stream = build_stream(
+        &device,
+        &config,
+        sample_format,
+        options.playback_format,
+        generator,
+    )?;
     stream.play()?;
 
     if let Some(seconds) = options.seconds {
@@ -88,6 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[derive(Debug, Clone)]
 struct CliOptions {
     kind: NoiseKind,
+    playback_format: PlaybackFormat,
     amplitude: f32,
     sample_rate: Option<u32>,
     channels: Option<u16>,
@@ -101,6 +114,7 @@ impl Default for CliOptions {
     fn default() -> Self {
         Self {
             kind: NoiseKind::Pink,
+            playback_format: PlaybackFormat::F32,
             amplitude: 0.2,
             sample_rate: None,
             channels: None,
@@ -122,6 +136,10 @@ impl CliOptions {
                 "--kind" => {
                     let value = next_value(&mut args, "--kind")?;
                     options.kind = parse_kind(&value)?;
+                }
+                "--playback" => {
+                    let value = next_value(&mut args, "--playback")?;
+                    options.playback_format = parse_playback_format(&value)?;
                 }
                 "--amplitude" => {
                     let value = next_value(&mut args, "--amplitude")?;
@@ -159,6 +177,21 @@ impl CliOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlaybackFormat {
+    F32,
+    Q015,
+}
+
+impl PlaybackFormat {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::F32 => "f32",
+            Self::Q015 => "Q0.15",
+        }
+    }
+}
+
 fn next_value(
     args: &mut impl Iterator<Item = String>,
     flag: &str,
@@ -173,6 +206,14 @@ fn parse_kind(value: &str) -> Result<NoiseKind, Box<dyn Error>> {
         "pink" => Ok(NoiseKind::Pink),
         "brown" => Ok(NoiseKind::Brown),
         _ => Err(format!("invalid noise kind: {value}").into()),
+    }
+}
+
+fn parse_playback_format(value: &str) -> Result<PlaybackFormat, Box<dyn Error>> {
+    match value {
+        "f32" => Ok(PlaybackFormat::F32),
+        "q015" | "pcm16" => Ok(PlaybackFormat::Q015),
+        _ => Err(format!("invalid playback format: {value}").into()),
     }
 }
 
@@ -199,19 +240,35 @@ fn build_stream(
     device: &cpal::Device,
     config: &StreamConfig,
     sample_format: SampleFormat,
+    playback_format: PlaybackFormat,
     generator: NoiseGenerator,
 ) -> Result<Stream, Box<dyn Error>> {
-    let stream = match sample_format {
-        SampleFormat::F32 => build_stream_inner::<f32>(device, config, generator)?,
-        SampleFormat::I16 => build_stream_inner::<i16>(device, config, generator)?,
-        SampleFormat::U16 => build_stream_inner::<u16>(device, config, generator)?,
+    let stream = match (playback_format, sample_format) {
+        (PlaybackFormat::F32, SampleFormat::F32) => {
+            build_stream_f32_inner::<f32>(device, config, generator)?
+        }
+        (PlaybackFormat::F32, SampleFormat::I16) => {
+            build_stream_f32_inner::<i16>(device, config, generator)?
+        }
+        (PlaybackFormat::F32, SampleFormat::U16) => {
+            build_stream_f32_inner::<u16>(device, config, generator)?
+        }
+        (PlaybackFormat::Q015, SampleFormat::F32) => {
+            build_stream_q015_inner::<f32>(device, config, generator)?
+        }
+        (PlaybackFormat::Q015, SampleFormat::I16) => {
+            build_stream_q015_inner::<i16>(device, config, generator)?
+        }
+        (PlaybackFormat::Q015, SampleFormat::U16) => {
+            build_stream_q015_inner::<u16>(device, config, generator)?
+        }
         _ => return Err(format!("unsupported sample format: {sample_format:?}").into()),
     };
 
     Ok(stream)
 }
 
-fn build_stream_inner<T>(
+fn build_stream_f32_inner<T>(
     device: &cpal::Device,
     config: &StreamConfig,
     mut generator: NoiseGenerator,
@@ -230,6 +287,35 @@ where
             }
 
             generator.fill_interleaved(&mut scratch);
+
+            for (sample, value) in data.iter_mut().zip(scratch.iter().copied()) {
+                *sample = T::from_sample(value);
+            }
+        },
+        err_fn,
+        None,
+    )
+}
+
+fn build_stream_q015_inner<T>(
+    device: &cpal::Device,
+    config: &StreamConfig,
+    mut generator: NoiseGenerator,
+) -> Result<Stream, cpal::BuildStreamError>
+where
+    T: SizedSample + FromSample<i16>,
+{
+    let err_fn = |err| eprintln!("stream error: {err}");
+    let mut scratch = Vec::<i16>::new();
+
+    device.build_output_stream(
+        config,
+        move |data: &mut [T], _| {
+            if scratch.len() != data.len() {
+                scratch.resize(data.len(), 0);
+            }
+
+            generator.fill_interleaved_q015(&mut scratch);
 
             for (sample, value) in data.iter_mut().zip(scratch.iter().copied()) {
                 *sample = T::from_sample(value);

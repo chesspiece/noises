@@ -31,6 +31,12 @@ Run the terminal player:
 cargo run --features cpal-demo --bin noise-player -- --kind pink
 ```
 
+Use the signed PCM Q0.15 generator path in the terminal player:
+
+```bash
+cargo run --features cpal-demo --bin noise-player -- --kind pink --playback q015
+```
+
 Try other noise colors:
 
 ```bash

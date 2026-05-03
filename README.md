@@ -13,7 +13,7 @@ The project is a Rust library for generating continuous white, pink, and brown n
 
 - White, pink, and brown noise generation
 - Continuous runtime generation
-- Rust library outputting `f32` audio samples
+- Rust library outputting `f32` audio samples or signed PCM Q0.15 `i16` samples
 - C-compatible FFI layer for native app integration
 - Optional `cpal` playback binary for local testing on desktop systems
 

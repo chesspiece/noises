@@ -45,6 +45,26 @@ pub extern "C" fn noises_generator_fill_f32(
     true
 }
 
+/// Fills an interleaved signed PCM Q0.15 buffer with freshly generated samples.
+#[unsafe(no_mangle)]
+pub extern "C" fn noises_generator_fill_q015(
+    generator: *mut NoiseGenerator,
+    output: *mut i16,
+    len: usize,
+) -> bool {
+    if generator.is_null() || output.is_null() {
+        return false;
+    }
+
+    // SAFETY: pointers are validated for null above, and the caller provides
+    // ownership of a writable buffer of `len` `i16` samples.
+    let generator = unsafe { &mut *generator };
+    // SAFETY: output is non-null and points to `len` writable `i16`s.
+    let output = unsafe { slice::from_raw_parts_mut(output, len) };
+    generator.fill_interleaved_q015(output);
+    true
+}
+
 /// Generates a single mono sample.
 #[unsafe(no_mangle)]
 pub extern "C" fn noises_generator_next_mono(generator: *mut NoiseGenerator) -> f32 {
@@ -56,6 +76,19 @@ pub extern "C" fn noises_generator_next_mono(generator: *mut NoiseGenerator) -> 
     // duration of the call.
     let generator = unsafe { &mut *generator };
     generator.next_mono()
+}
+
+/// Generates a single mono signed PCM Q0.15 sample.
+#[unsafe(no_mangle)]
+pub extern "C" fn noises_generator_next_mono_q015(generator: *mut NoiseGenerator) -> i16 {
+    if generator.is_null() {
+        return 0;
+    }
+
+    // SAFETY: the pointer is non-null and treated as uniquely borrowed for the
+    // duration of the call.
+    let generator = unsafe { &mut *generator };
+    generator.next_mono_q015()
 }
 
 /// Switches the active noise color.

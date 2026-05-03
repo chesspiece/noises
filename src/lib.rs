@@ -13,6 +13,9 @@ use noises::{NoiseConfig, NoiseGenerator, NoiseKind};
 let mut generator = NoiseGenerator::new(NoiseConfig::new(NoiseKind::Pink)).unwrap();
 let mut stereo_buffer = [0.0f32; 512];
 generator.fill_interleaved(&mut stereo_buffer);
+
+let mut pcm_buffer = [0i16; 512];
+generator.fill_interleaved_q015(&mut pcm_buffer);
 ```
 "#]
 

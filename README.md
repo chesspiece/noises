@@ -1,6 +1,6 @@
 # noises
 
-`noises` is a vibecoded project.
+`noises` was made with the help of openai codex.
 
 It was created for two reasons:
 

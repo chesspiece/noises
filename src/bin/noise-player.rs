@@ -3,7 +3,7 @@
 use std::{env, error::Error, io, thread, time::Duration};
 
 use cpal::{
-    FromSample, SampleFormat, SizedSample, Stream, StreamConfig,
+    FromSample, OutputCallbackInfo, SampleFormat, SizedSample, Stream, StreamConfig,
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 use noises::{NoiseConfig, NoiseGenerator, NoiseKind};
@@ -49,7 +49,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let device_name = device.name()?;
     let default_config = device.default_output_config()?;
-    println!( "Sample format: {}", default_config.sample_format().to_string());
+    println!(
+        "Sample format: {}",
+        default_config.sample_format().to_string()
+    );
     let sample_format = default_config.sample_format();
 
     let mut config: StreamConfig = default_config.into();
@@ -281,7 +284,7 @@ where
 
     device.build_output_stream(
         config,
-        move |data: &mut [T], _| {
+        move |data: &mut [T], _: &OutputCallbackInfo| {
             if scratch.len() != data.len() {
                 scratch.resize(data.len(), 0.0);
             }
@@ -310,7 +313,7 @@ where
 
     device.build_output_stream(
         config,
-        move |data: &mut [T], _| {
+        move |data: &mut [T], _: &OutputCallbackInfo| {
             if scratch.len() != data.len() {
                 scratch.resize(data.len(), 0);
             }

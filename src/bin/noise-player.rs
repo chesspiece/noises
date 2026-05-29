@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .ok_or("no default output device available")?,
     };
 
-    let device_name = device.name()?;
+    let device_description = device.description()?;
     let default_config = device.default_output_config()?;
     println!(
         "Sample format: {}",
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut config: StreamConfig = default_config.into();
     if let Some(sample_rate) = options.sample_rate {
-        config.sample_rate.0 = sample_rate;
+        config.sample_rate = sample_rate;
     }
     if let Some(channels) = options.channels {
         config.channels = channels;
@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let generator = NoiseGenerator::new(NoiseConfig {
         kind: options.kind,
-        sample_rate: config.sample_rate.0,
+        sample_rate: config.sample_rate,
         channels: config.channels,
         amplitude: options.amplitude,
         seed: options.seed,
@@ -75,8 +75,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         "playing {:?} noise ({}) on \"{}\" at {} Hz / {} channels",
         options.kind,
         options.playback_format.label(),
-        device_name,
-        config.sample_rate.0,
+        device_description.name(),
+        config.sample_rate,
         config.channels
     );
 
@@ -222,7 +222,7 @@ fn parse_playback_format(value: &str) -> Result<PlaybackFormat, Box<dyn Error>> 
 
 fn list_devices(host: &cpal::Host) -> Result<(), Box<dyn Error>> {
     for device in host.output_devices()? {
-        println!("{}", device.name()?);
+        println!("{}", device.description()?.name());
     }
     Ok(())
 }
@@ -232,7 +232,7 @@ fn find_output_device(
     name: &str,
 ) -> Result<Option<cpal::Device>, Box<dyn Error>> {
     for device in host.output_devices()? {
-        if device.name()?.as_str() == name {
+        if device.description()?.name() == name {
             return Ok(Some(device));
         }
     }
